@@ -1,0 +1,1662 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HSM — Proxxima</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0f14;
+    --surface: #13161e;
+    --surface2: #1a1e28;
+    --border: #242836;
+    --border2: #2e3448;
+    --text: #e8eaf0;
+    --muted: #6b7280;
+    --accent: #4f8ef7;
+    --accent2: #7c5cf6;
+    --error: #f05252;
+    --delivered: #10b981;
+    --sent: #4f8ef7;
+    --read: #a78bfa;
+    --pending: #f59e0b;
+    --warning: #f59e0b;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; }
+
+  /* HEADER */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 28px;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 60px; position: sticky; top: 0; z-index: 100;
+  }
+  .logo { display: flex; align-items: center; gap: 9px; font-weight: 800; font-size: 17px; letter-spacing: -0.4px; }
+  .logo-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .header-right { display: flex; align-items: center; gap: 20px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+  .rate-meter {
+    display: flex; align-items: center; gap: 7px;
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: 6px; padding: 5px 10px;
+  }
+  .rate-label { color: var(--muted); }
+  .rate-bar-wrap { width: 64px; height: 5px; background: var(--border2); border-radius: 3px; overflow: hidden; }
+  .rate-bar { height: 100%; border-radius: 3px; background: var(--delivered); transition: width 0.4s, background 0.4s; }
+  .rate-bar.warn { background: var(--warning); }
+  .rate-bar.crit { background: var(--error); }
+  .rate-num { min-width: 28px; text-align: right; }
+
+  .countdown-wrap { display: flex; align-items: center; gap: 6px; }
+  .pulse-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--delivered); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+  /* ALERTA */
+  #alert-banner {
+    display: none; align-items: center; gap: 12px;
+    background: rgba(240,82,82,0.12); border: 1px solid rgba(240,82,82,0.35);
+    border-radius: 10px; padding: 13px 18px; margin: 20px 28px 0;
+    font-size: 13px; color: var(--error); font-family: var(--mono);
+    animation: slideInAlert 0.3s ease;
+  }
+  #alert-banner.show { display: flex; }
+  #alert-banner .alert-icon { font-size: 18px; flex-shrink: 0; }
+  #alert-banner button {
+    margin-left: auto; background: none; border: 1px solid var(--error);
+    color: var(--error); border-radius: 5px; padding: 3px 10px;
+    cursor: pointer; font-family: var(--mono); font-size: 11px;
+    transition: all 0.2s;
+  }
+  #alert-banner button:hover { background: rgba(240,82,82,0.2); }
+  @keyframes slideInAlert { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+
+  /* ERRO INLINE */
+  #error-bar {
+    display: none; align-items: center; gap: 10px;
+    background: rgba(240,82,82,0.08); border: 1px solid rgba(240,82,82,0.25);
+    border-radius: 8px; padding: 10px 16px; margin: 16px 28px 0;
+    font-size: 12px; color: var(--error); font-family: var(--mono);
+    animation: slideInError 0.3s ease;
+  }
+  #error-bar.show { display: flex; }
+  #error-bar::before { content: "⚠"; font-size: 16px; flex-shrink: 0; }
+  @keyframes slideInError { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
+
+  /* MAIN */
+  main { padding: 24px 28px; }
+
+  /* FILTROS */
+  .filters {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px 20px;
+    display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap;
+    margin-bottom: 22px;
+  }
+  .filter-group { display: flex; flex-direction: column; gap: 5px; }
+  .filter-group label {
+    font-size: 10px; font-family: var(--mono); color: var(--muted);
+    letter-spacing: 0.09em; text-transform: uppercase;
+  }
+  .filter-group input, .filter-group select {
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: 7px; color: var(--text); font-family: var(--mono);
+    font-size: 12px; padding: 9px 13px; outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+    min-width: 150px;
+  }
+  .filter-group input:focus, .filter-group select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 8px rgba(79,142,247,0.2);
+  }
+  .filter-group select option { background: var(--surface2); }
+
+  .btn {
+    border: none; border-radius: 7px; padding: 9px 20px;
+    font-family: var(--sans); font-weight: 700; font-size: 13px;
+    cursor: pointer; transition: opacity 0.2s, transform 0.1s, box-shadow 0.2s;
+    display: flex; align-items: center; gap: 7px; white-space: nowrap;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { opacity: 0.85; box-shadow: 0 0 12px rgba(79,142,247,0.3); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+
+  /* STATS */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap: 14px; margin-bottom: 24px; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px;
+    display: flex; flex-direction: column; gap: 14px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .stat-card:hover { border-color: var(--accent); box-shadow: 0 0 12px rgba(79,142,247,0.1); }
+  .stat-header { display: flex; align-items: center; justify-content: space-between; }
+  .stat-label { font-size: 11px; font-family: var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+  .stat-icon { font-size: 18px; opacity: 0.7; }
+  .stat-content { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 12px; }
+  .stat-value {
+    font-size: 36px; font-weight: 800; line-height: 1.1; font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: -1px;
+  }
+  .stat-value.total    { color: var(--text); }
+  .stat-value.error    { color: var(--error); }
+  .stat-value.delivered{ color: var(--delivered); }
+  .stat-value.sent     { color: var(--sent); }
+  .stat-value.read     { color: var(--read); }
+  .stat-value.pending  { color: var(--pending); }
+  .stat-value.success  { color: var(--delivered); }
+  .stat-pct { font-size: 13px; color: var(--muted); font-family: var(--mono); font-weight: 600; padding: 2px 8px; background: var(--surface2); border-radius: 5px; }
+  .stat-bar { width: 100%; height: 8px; background: var(--border2); border-radius: 4px; overflow: hidden; }
+  .stat-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s cubic-bezier(0.4,0,0.2,1); }
+
+  /* TABELA */
+  .table-container { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .table-header {
+    padding: 14px 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  }
+  .table-title { font-weight: 700; font-size: 13px; }
+  .record-info { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead tr { background: var(--surface2); border-bottom: 1px solid var(--border2); }
+  th {
+    text-align: left; padding: 9px 13px;
+    font-family: var(--mono); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); white-space: nowrap;
+  }
+  td { padding: 10px 13px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 11px; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--surface2); }
+
+  .td-timestamp { color: white; white-space: nowrap; font-size: 11px; }
+  .td-key { color: var(--accent); letter-spacing: 0.03em; }
+  .td-template { max-width: 200px; word-break: break-all; color: var(--accent2); font-size: 11px; }
+  .td-reason { max-width: 260px; font-size: 10px; color: var(--muted); line-height: 1.5; }
+  .td-id { color: var(--muted); font-size: 10px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 600; white-space: nowrap;
+  }
+  .badge-dot { width: 4px; height: 4px; border-radius: 50%; }
+  .badge.error    { background: rgba(240,82,82,0.15);  color: var(--error);     }
+  .badge.error    .badge-dot { background: var(--error); }
+  .badge.delivered{ background: rgba(16,185,129,0.15); color: var(--delivered); }
+  .badge.delivered .badge-dot { background: var(--delivered); }
+  .badge.sent     { background: rgba(79,142,247,0.15); color: var(--sent);      }
+  .badge.sent     .badge-dot { background: var(--sent); }
+  .badge.read     { background: rgba(167,139,250,0.15);color: var(--read);      }
+  .badge.read     .badge-dot { background: var(--read); }
+  .badge.pending  { background: rgba(245,158,11,0.15); color: var(--pending);   }
+  .badge.pending  .badge-dot { background: var(--pending); }
+
+  /* PAGINAÇÃO */
+  .pagination {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 14px 20px; border-top: 1px solid var(--border);
+    font-family: var(--mono); font-size: 11px;
+  }
+  .page-btn {
+    background: var(--surface2); border: 1px solid var(--border2);
+    color: var(--text); border-radius: 6px; padding: 5px 10px;
+    cursor: pointer; font-family: var(--mono); font-size: 11px;
+    transition: border-color 0.15s, background 0.15s; min-width: 32px; text-align: center;
+  }
+  .page-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: var(--surface); }
+  .page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .page-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .page-info { color: var(--muted); padding: 0 6px; }
+
+  /* ESTADOS */
+  .state-box { padding: 52px 20px; text-align: center; color: var(--muted); font-family: var(--mono); font-size: 12px; }
+  .state-icon { font-size: 28px; margin-bottom: 10px; }
+  .spinner { width: 22px; height: 22px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; margin: 0 auto 10px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* TOAST */
+  #toast {
+    position: fixed; bottom: 22px; right: 22px;
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: 8px; padding: 10px 16px;
+    font-family: var(--mono); font-size: 11px; color: var(--text);
+    opacity: 0; transform: translateY(6px); transition: opacity .25s, transform .25s;
+    pointer-events: none; z-index: 999;
+  }
+  #toast.show { opacity: 1; transform: translateY(0); }
+
+  /* RATE LIMIT HISTORY */
+  .rate-limit-container {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; margin-top: 24px; overflow: hidden;
+  }
+  .rate-limit-header {
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+  }
+  .rate-limit-title { font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .rate-limit-badge {
+    background: var(--error); color: #fff;
+    border-radius: 20px; padding: 4px 12px;
+    font-family: var(--mono); font-size: 12px; font-weight: 600;
+  }
+  .rate-limit-badge.ok {
+    background: var(--delivered); color: #fff;
+  }
+  .rate-limit-badge.warn {
+    background: var(--warning); color: #fff;
+  }
+  .rate-limit-table-wrap {
+    overflow-x: auto;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  .rate-limit-table {
+    width: 100%; border-collapse: collapse;
+    font-family: var(--mono); font-size: 12px;
+  }
+  .rate-limit-table thead {
+    background: var(--surface2); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 1;
+  }
+  .rate-limit-table th {
+    text-align: left; padding: 10px 14px;
+    font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.07em; color: var(--muted);
+    border-right: 1px solid var(--border);
+  }
+  .rate-limit-table th:last-child { border-right: none; }
+  .rate-limit-table td {
+    padding: 11px 14px; border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+  .rate-limit-table tr:hover td { background: var(--surface2); }
+  .rate-limit-table tr:last-child td { border-bottom: none; }
+  .rate-limit-table tbody tr:nth-child(odd) { background: rgba(240, 82, 82, 0.12); border-left: 3px solid var(--error); }
+  .rate-limit-table tbody tr:nth-child(odd) td { color: var(--error); font-weight: 500; }
+  .rate-limit-table tbody tr:nth-child(even) { background: rgba(245, 158, 11, 0.12); border-left: 3px solid var(--warning); }
+  .rate-limit-table tbody tr:nth-child(even) td { color: var(--warning); font-weight: 500; }
+  .rate-limit-table tbody tr:hover td { background: var(--surface2) !important; color: white !important; font-weight: 600 !important; }
+  .rate-limit-time { color: var(--accent); white-space: nowrap; }
+  .rate-limit-msg { color: var(--error); font-weight: 600; }
+  .rate-limit-empty {
+    padding: 40px 20px; text-align: center;
+    color: var(--muted); font-family: var(--mono);
+  }
+
+  /* ANÁLISE DE ERROS */
+  .error-analysis-container {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; margin-top: 24px; overflow: hidden;
+  }
+  .error-analysis-header {
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+  }
+  .error-analysis-title { font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .error-filter {
+    display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11px;
+  }
+  .error-filter select {
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: 6px; color: var(--text); padding: 6px 10px;
+    outline: none; cursor: pointer;
+  }
+  .error-filter select:focus { border-color: var(--accent); }
+  .error-table-wrap { overflow-x: auto; max-height: 500px; overflow-y: auto; }
+  .error-table {
+    width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px;
+  }
+  .error-table thead {
+    background: var(--surface2); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 1;
+  }
+  .error-table th {
+    text-align: left; padding: 10px 14px;
+    font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.07em; color: var(--muted);
+    border-right: 1px solid var(--border);
+  }
+  .error-table th:last-child { border-right: none; }
+  .error-table td { padding: 11px 14px; border-bottom: 1px solid var(--border); color: var(--text); }
+  .error-table tbody tr:nth-child(4n+1) { background: rgba(79, 142, 247, 0.12); border-left: 3px solid var(--sent); }
+  .error-table tbody tr:nth-child(4n+1) td { color: var(--sent); font-weight: 500; }
+  .error-table tbody tr:nth-child(4n+2) { background: rgba(16, 185, 129, 0.12); border-left: 3px solid var(--delivered); }
+  .error-table tbody tr:nth-child(4n+2) td { color: var(--delivered); font-weight: 500; }
+  .error-table tbody tr:nth-child(4n+3) { background: rgba(167, 139, 250, 0.12); border-left: 3px solid var(--read); }
+  .error-table tbody tr:nth-child(4n+3) td { color: var(--read); font-weight: 500; }
+  .error-table tbody tr:nth-child(4n+4) { background: rgba(240, 82, 82, 0.12); border-left: 3px solid var(--error); }
+  .error-table tbody tr:nth-child(4n+4) td { color: var(--error); font-weight: 600; }
+  .error-table tr:hover td { background: var(--surface2) !important; color: white !important; }
+  .error-table tr:last-child td { border-bottom: none; }
+  .error-template { color: var(--accent2); font-weight: 600; }
+  .error-count { color: var(--error); font-weight: 700; font-size: 13px; }
+  .error-reason { color: var(--text); }
+  .error-reason-count { color: var(--error); }
+  .error-empty {
+    padding: 40px 20px; text-align: center; color: var(--muted);
+  }
+
+  /* ANÁLISE POR MINUTO */
+  .minute-container {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; margin-top: 24px; overflow: hidden;
+  }
+  .minute-header {
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+    font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  }
+  .minute-legend-inline {
+    display: flex; gap: 16px; flex-wrap: wrap; align-items: center;
+    font-family: var(--mono); font-size: 11px;
+  }
+  .minute-legend-item {
+    display: flex; align-items: center; gap: 6px;
+  }
+  .minute-legend-dot {
+    width: 12px; height: 12px; border-radius: 2px;
+  }
+  .minute-chart-wrap {
+    padding: 20px;
+    position: relative;
+    min-height: 340px;
+  }
+  #minute-chart-canvas {
+    width: 100% !important;
+    height: 300px !important;
+  }
+
+  /* RATE LIMIT ANALYSIS */
+  /* RATE LIMIT BADGE - Compacto */
+  .rate-limit-badge {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    padding: 10px 14px;
+    transition: all 0.3s ease;
+  }
+  .rate-limit-badge.alert {
+    background: rgba(240,82,82,0.1);
+    border-color: var(--error);
+    animation: pulse-badge 1.5s infinite;
+  }
+  @keyframes pulse-badge {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.8; transform: scale(1.02); }
+  }
+  .rate-limit-badge-icon {
+    font-size: 16px;
+    display: none;
+  }
+  .rate-limit-badge.alert .rate-limit-badge-icon {
+    display: block;
+  }
+  .rate-limit-badge-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .rate-limit-badge-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .rate-limit-badge-count {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .rate-limit-badge.alert .rate-limit-badge-count {
+    color: var(--error);
+  }
+
+  /* RATE LIMIT ALERT MELHORADO */
+  .rate-alert {
+    display: none;
+    align-items: center;
+    gap: 14px;
+    background: linear-gradient(135deg, rgba(240,82,82,0.15), rgba(245,158,11,0.1));
+    border: 2px solid var(--error);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin: 20px 28px 0;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--error);
+    animation: slideInAlert 0.3s ease;
+  }
+  .rate-alert.show { display: flex; }
+  .rate-alert-icon {
+    font-size: 24px;
+    animation: pulse-alert 1s infinite;
+    flex-shrink: 0;
+  }
+  .rate-alert-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .rate-alert-title { font-weight: 700; font-size: 13px; }
+  .rate-alert-desc { color: rgba(240,82,82,0.8); font-size: 11px; }
+  .rate-alert-close {
+    background: none; border: none;
+    color: var(--error);
+    cursor: pointer; font-family: var(--mono);
+    font-size: 18px; flex-shrink: 0;
+    transition: opacity 0.2s;
+  }
+  .rate-alert-close:hover { opacity: 0.7; }
+  @keyframes pulse-alert {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  /* ALERTAS MELHORADOS */
+  .alerts-container {
+    display: grid; gap: 12px; margin-bottom: 22px;
+  }
+  .alert-box {
+    display: flex; align-items: center; gap: 12px;
+    border-radius: 10px; padding: 14px 18px;
+    font-family: var(--mono); font-size: 12px;
+    border-left: 4px solid;
+    animation: slideIn 0.3s ease;
+  }
+  .alert-box.info {
+    background: rgba(79,142,247,0.1); border-color: var(--accent); color: var(--accent);
+  }
+  .alert-box.warning {
+    background: rgba(245,158,11,0.1); border-color: var(--warning); color: var(--warning);
+  }
+  .alert-box.error {
+    background: rgba(240,82,82,0.1); border-color: var(--error); color: var(--error);
+  }
+  .alert-box.success {
+    background: rgba(16,185,129,0.1); border-color: var(--delivered); color: var(--delivered);
+  }
+  @keyframes slideIn { from { transform: translateX(-8px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+  /* FILTRO DE TEMPLATES COM BUSCA */
+  .template-search-wrapper {
+    position: relative;
+  }
+  .template-search-input {
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: 7px; color: var(--text); font-family: var(--mono);
+    font-size: 12px; padding: 9px 13px; outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+    min-width: 150px; width: 100%;
+  }
+  .template-search-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 8px rgba(79,142,247,0.2);
+  }
+  .template-suggestions {
+    position: absolute; top: 100%; left: 0; right: 0;
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-top: none; border-radius: 0 0 7px 7px;
+    max-height: 200px; overflow-y: auto; z-index: 10;
+    display: none;
+  }
+  .template-suggestions.active {
+    display: block;
+  }
+  .template-suggestion-item {
+    padding: 9px 13px; border-bottom: 1px solid var(--border);
+    cursor: pointer; font-family: var(--mono); font-size: 12px;
+    color: var(--text); transition: background 0.15s;
+  }
+  .template-suggestion-item:hover,
+  .template-suggestion-item.highlight {
+    background: var(--border2); color: var(--accent);
+  }
+  .template-suggestion-item.template-all-option {
+    background: rgba(79, 142, 247, 0.1);
+    color: var(--accent);
+    border-bottom: 2px solid var(--accent);
+    font-weight: 600;
+  }
+  .template-suggestion-item.template-all-option:hover {
+    background: rgba(79, 142, 247, 0.2);
+  }
+  .template-suggestion-item:last-child {
+    border-bottom: none;
+  }
+
+  /* SELECTOR DE GRANULARIDADE TEMPORAL */
+  .granularity-selector {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .granularity-btn {
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: 6px; color: var(--text); font-family: var(--mono);
+    font-size: 11px; padding: 7px 12px; cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+  }
+  .granularity-btn:hover {
+    border-color: var(--accent); color: var(--accent);
+  }
+  .granularity-btn.active {
+    background: var(--accent); border-color: var(--accent);
+    color: #fff; font-weight: 700;
+  }
+
+  /* USER MENU */
+  .user-menu {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-left: 1px solid var(--border);
+    padding-left: 16px;
+  }
+  .user-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+  .user-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .user-email {
+    font-size: 10px;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+  .user-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .logout-btn {
+    background: none;
+    border: 1px solid var(--border2);
+    color: var(--muted);
+    border-radius: 6px;
+    padding: 7px 12px;
+    font-family: var(--mono);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .logout-btn:hover {
+    border-color: var(--error);
+    color: var(--error);
+    background: rgba(240, 82, 82, 0.1);
+  }
+
+  /* FOOTER */
+  footer {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 24px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 40px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .footer-left {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .footer-left span {
+    display: block;
+  }
+  .footer-left span:first-child {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text);
+    font-weight: 600;
+  }
+  .footer-links {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .footer-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    color: var(--text);
+    text-decoration: none;
+    transition: all 0.2s ease;
+    font-size: 18px;
+  }
+  .footer-link:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(79, 142, 247, 0.3);
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    HSM Relatório
+  </div>
+  <div class="header-right">
+
+    <!-- Medidor de req/min -->
+    <div class="rate-meter" title="Requisições no último minuto">
+      <span class="rate-label">req/min</span>
+      <div class="rate-bar-wrap"><div class="rate-bar" id="rate-bar" style="width:0%"></div></div>
+      <span class="rate-num" id="rate-num">0/10</span>
+    </div>
+
+    <!-- Contador regressivo -->
+    <div class="countdown-wrap">
+      <div class="pulse-dot"></div>
+      <span>Próxima: <span id="countdown">5:00</span></span>
+    </div>
+
+    <!-- Seletor de intervalo de atualização -->
+    <select id="updateInterval" style="background: var(--surface2); border: 1px solid var(--border2); border-radius: 6px; color: var(--text); font-family: var(--mono); font-size: 11px; padding: 5px 10px; outline: none; cursor: pointer;">
+      <option value="60">1 min</option>
+      <option value="180">3 min</option>
+      <option value="300" selected>5 min</option>
+      <option value="600">10 min</option>
+      <option value="900">15 min</option>
+      <option value="1200">20 min</option>
+    </select>
+
+    <span id="last-update" style="color:var(--muted)">—</span>
+
+    <!-- MENU DE USUÁRIO -->
+    <div class="user-menu" id="userMenu" style="display: none;">
+      <div class="user-info">
+        <span class="user-name" id="userName">—</span>
+        <span class="user-email" id="userEmail">—</span>
+      </div>
+      <div class="user-avatar" id="userAvatar">?</div>
+      <a href="/logout" class="logout-btn">🚪 Sair</a>
+    </div>
+  </div> <!-- fecha header-right -->
+</header>
+
+<!-- ALERTA DE RATE LIMIT -->
+<div id="rate-alert" class="rate-alert">
+  <span class="rate-alert-icon">⚠️</span>
+  <div class="rate-alert-content">
+    <div class="rate-alert-title">Limite de Taxa Atingido!</div>
+    <div class="rate-alert-desc" id="rate-alert-msg">Você atingiu o limite de 10 requisições por minuto.</div>
+  </div>
+  <button class="rate-alert-close" onclick="closeRateAlert()">✕</button>
+</div>
+
+<!-- BARRA DE ERRO -->
+<div id="error-bar">
+  <span>✕</span>
+  <span id="error-msg"></span>
+</div>
+
+<main>
+  <!-- FILTROS -->
+  <div class="filters">
+    <div class="filter-group">
+      <label>Data inicial</label>
+      <input type="date" id="startDate" value="{{ today }}">
+    </div>
+    <div class="filter-group">
+      <label>Data final</label>
+      <input type="date" id="endDate" value="{{ today }}">
+    </div>
+    <div class="filter-group">
+      <label>Template (pesquisa)</label>
+      <div class="template-search-wrapper">
+        <input type="text" id="templateFilter" class="template-search-input" placeholder="Digite para pesquisar...">
+        <div class="template-suggestions" id="templateSuggestions"></div>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="btn-atualizar" onclick="loadPage(1)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+      </svg>
+      Atualizar
+    </button>
+
+    <!-- SELECTOR DE GRANULARIDADE TEMPORAL -->
+    <div class="filter-group" style="min-width: auto;">
+      <label>Análise Temporal</label>
+      <div class="granularity-selector">
+        <button class="granularity-btn active" data-granularity="day" onclick="changeGranularity('day')">📅 Dia</button>
+        <button class="granularity-btn" data-granularity="hour" onclick="changeGranularity('hour')">⏰ Hora</button>
+        <button class="granularity-btn" data-granularity="minute" onclick="changeGranularity('minute')">⏱ Minuto</button>
+      </div>
+    </div>
+
+    <!-- RATE LIMIT STATUS BADGE -->
+    <div class="rate-limit-badge" id="rate-limit-badge">
+      <div class="rate-limit-badge-icon">⚠️</div>
+      <div class="rate-limit-badge-text">
+        <div class="rate-limit-badge-label">Rate Limit</div>
+        <div class="rate-limit-badge-count" id="rate-limit-count">0 erros</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats">
+    <div class="stat-card">
+      <div class="stat-header">
+        <div class="stat-label">📊 Total</div>
+        <div class="stat-icon">∑</div>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value total" id="stat-total">—</div>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-header">
+        <div class="stat-label">✓ Sucesso</div>
+        <div class="stat-icon">✔</div>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value success" id="stat-sucesso">—</div>
+        <div class="stat-pct" id="stat-pct-sucesso"></div>
+      </div>
+      <div class="stat-bar"><div class="stat-bar-fill" id="stat-bar-sucesso" style="background:var(--delivered);width:0%"></div></div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-header">
+        <div class="stat-label">✗ Erros</div>
+        <div class="stat-icon">⚠</div>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value error" id="stat-erros">—</div>
+        <div class="stat-pct" id="stat-pct-erros"></div>
+      </div>
+      <div class="stat-bar"><div class="stat-bar-fill" id="stat-bar-erros" style="background:var(--error);width:0%"></div></div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-header">
+        <div class="stat-label">📦 Entregues</div>
+        <div class="stat-icon">📬</div>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value delivered" id="stat-entregues">—</div>
+        <div class="stat-pct" id="stat-pct-entregues"></div>
+      </div>
+      <div class="stat-bar"><div class="stat-bar-fill" id="stat-bar-entregues" style="background:var(--delivered);width:0%"></div></div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-header">
+        <div class="stat-label">📤 Enviados</div>
+        <div class="stat-icon">➤</div>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value sent" id="stat-enviados">—</div>
+        <div class="stat-pct" id="stat-pct-enviados"></div>
+      </div>
+      <div class="stat-bar"><div class="stat-bar-fill" id="stat-bar-enviados" style="background:var(--sent);width:0%"></div></div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-header">
+        <div class="stat-label">👁 Lidos</div>
+        <div class="stat-icon">👀</div>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value read" id="stat-lidos">—</div>
+        <div class="stat-pct" id="stat-pct-lidos"></div>
+      </div>
+      <div class="stat-bar"><div class="stat-bar-fill" id="stat-bar-lidos" style="background:var(--read);width:0%"></div></div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-header">
+        <div class="stat-label">⏳ Pendentes</div>
+        <div class="stat-icon">⌛</div>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value pending" id="stat-pendentes">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TABELA -->
+  <div class="table-container">
+    <div class="table-header">
+      <span class="table-title">Registros</span>
+      <span class="record-info" id="record-info">—</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Data/Hora</th>
+            <th>Número</th>
+            <th>Template</th>
+            <th>Status</th>
+            <th>Motivo</th>
+            <th>ID Fluxo</th>
+            <th>ID Agente</th>
+            <th>ID Conversa</th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          <tr><td colspan="8"><div class="state-box"><div class="spinner"></div>Carregando...</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination" id="pagination"></div>
+  </div>
+
+  <!-- ANÁLISE POR MINUTO COM GRÁFICO DE LINHAS -->
+  <div class="minute-container">
+    <div class="minute-header">
+      <div>� Análise Temporal por Dia</div>
+      <div class="minute-legend-inline">
+        <div class="minute-legend-item"><div class="minute-legend-dot" style="background:var(--sent)"></div><span>Enviados</span></div>
+        <div class="minute-legend-item"><div class="minute-legend-dot" style="background:var(--delivered)"></div><span>Entregues</span></div>
+        <div class="minute-legend-item"><div class="minute-legend-dot" style="background:var(--read)"></div><span>Lidos</span></div>
+        <div class="minute-legend-item"><div class="minute-legend-dot" style="background:var(--error)"></div><span>Erros</span></div>
+      </div>
+    </div>
+    <div class="minute-chart-wrap">
+      <canvas id="minute-chart-canvas"></canvas>
+    </div>
+  </div>
+
+  <!-- ANÁLISE DE ERROS -->
+  <div class="error-analysis-container">
+    <div class="error-analysis-header">
+      <div class="error-analysis-title">🔍 Análise de Erros por Template</div>
+      <div class="error-filter">
+        <label>Filtrar:</label>
+        <select id="error-filter-select" onchange="filterErrorAnalysis()">
+          <option value="">Todos</option>
+          <option value="by-template">Por Template</option>
+          <option value="by-reason">Por Motivo</option>
+        </select>
+      </div>
+    </div>
+    <div class="error-table-wrap">
+      <table class="error-table">
+        <thead>
+          <tr>
+            <th>Template</th>
+            <th>Total de Erros</th>
+            <th>Motivos</th>
+            <th>Quantidade</th>
+          </tr>
+        </thead>
+        <tbody id="error-tbody">
+          <tr><td colspan="4" class="error-empty">Carregando análise de erros...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- HISTÓRICO DE RATE LIMIT -->
+  <div class="rate-limit-container">
+    <div class="rate-limit-header">
+      <div class="rate-limit-title">
+        🚨 Histórico de Rate Limit
+      </div>
+      <div class="rate-limit-badge" id="rate-limit-badge-status">0 erros</div>
+    </div>
+    <div class="rate-limit-table-wrap">
+      <table class="rate-limit-table">
+        <thead>
+          <tr>
+            <th>Data/Hora</th>
+            <th>Código</th>
+            <th>Mensagem</th>
+          </tr>
+        </thead>
+        <tbody id="rate-limit-tbody">
+          <tr><td colspan="3" class="rate-limit-empty">Nenhum erro de rate limit registrado</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <footer>
+    <div class="footer-left">
+      <span>© 2026 Todos os direitos reservados</span>
+      <span>Desenvolvido por: Klinsman Aguiar Ribeiro</span>
+    </div>
+    <div class="footer-links">
+      <a href="https://www.linkedin.com/in/klinsman-aguiar-ribeiro-4a3902179/" target="_blank" rel="noopener noreferrer" class="footer-link" title="LinkedIn">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+          <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+        </svg>
+      </a>
+    </div>
+  </footer>
+<div id="toast"></div>
+
+<script>
+  // Dados do usuário passados pelo backend
+  window.userData = {{ user | default({}) | tojson }};
+
+  let currentPage = 1;
+  let totalPages = 1;
+  let updateIntervalSeconds = 5 * 60; // 5 minutos por padrão
+  let countdown = updateIntervalSeconds;
+  let totalRateLimitHits = 0;
+  let lastAlertThreshold = 0;
+  let minuteChart = null;
+  let lastRateLimitAlert = 0;
+
+  function pad(n){ return String(n).padStart(2,'0'); }
+
+  function fmt(n){
+    if(n === null || n === undefined || n === '—') return '—';
+    return Number(n).toLocaleString('pt-BR');
+  }
+
+  function fmtPhone(v){
+    if(!v || v === '—') return '—';
+    const d = String(v).replace(/\D/g,'');
+    if(d.length === 13) return `+${d.slice(0,2)} (${d.slice(2,4)}) ${d.slice(4,9)}-${d.slice(9)}`;
+    if(d.length === 12) return `+${d.slice(0,2)} (${d.slice(2,4)}) ${d.slice(4,8)}-${d.slice(8)}`;
+    if(d.length === 11) return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
+    return v;
+  }
+
+  function showToast(msg){
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'), 2500);
+  }
+
+  function showError(msg){
+    const b = document.getElementById('error-bar');
+    document.getElementById('error-msg').textContent = msg;
+    b.classList.add('show');
+    setTimeout(()=>b.classList.remove('show'), 8000);
+  }
+
+  function dismissAlert(){
+    document.getElementById('alert-banner').classList.remove('show');
+  }
+
+  function closeRateAlert(){
+    document.getElementById('rate-alert').classList.remove('show');
+  }
+
+  function checkAlert(hits){
+    if(hits > 0 && Math.floor(hits/10) > lastAlertThreshold){
+      lastAlertThreshold = Math.floor(hits/10);
+      const banner = document.getElementById('alert-banner');
+      document.getElementById('alert-msg').textContent =
+        `⚠ Atenção: ${hits} bloqueios por rate limit acumulados. Reduza a frequência de requisições.`;
+      banner.classList.add('show');
+    }
+    totalRateLimitHits = hits;
+  }
+
+  function checkRateLimit(current, limit){
+    // Mostrar alerta quando passar de 10
+    if(current > limit){
+      const rateAlert = document.getElementById('rate-alert');
+      const now = Date.now();
+      // Mostrar alerta apenas uma vez a cada 3 segundos
+      if(now - lastRateLimitAlert > 3000){
+        document.getElementById('rate-alert-msg').textContent = 
+          `Você atingiu o limite de ${limit} requisições por minuto. ${current - limit} requisições bloqueadas.`;
+        rateAlert.classList.add('show');
+        lastRateLimitAlert = now;
+      }
+    }
+  }
+
+  function updateRateMeter(current, limit){
+    const pct = Math.min(100, (current/limit)*100);
+    const bar = document.getElementById('rate-bar');
+    document.getElementById('rate-num').textContent = `${current}/${limit}`;
+    bar.style.width = pct + '%';
+    bar.className = 'rate-bar' + (pct>=100?' crit':pct>=70?' warn':'');
+    
+    // Verificar se passou do limite
+    checkRateLimit(current, limit);
+  }
+
+  function updateRateLimitBadge(num130429){
+    // Atualiza o badge compacto de Rate Limit com o contador de erros 130429
+    const badge = document.getElementById('rate-limit-badge');
+    const countEl = document.getElementById('rate-limit-count');
+    
+    countEl.textContent = `${num130429} ${num130429 === 1 ? 'erro' : 'erros'}`;
+    
+    if(num130429 >= 10){
+      badge.classList.add('alert');
+    } else {
+      badge.classList.remove('alert');
+    }
+  }
+
+  function updateRateLimitHistory(total, history){
+    const badge = document.getElementById('rate-limit-badge-status');
+    const tbody = document.getElementById('rate-limit-tbody');
+    
+    // Atualizar badge
+    if(total === 0){
+      badge.textContent = 'Sem erros';
+      badge.className = 'rate-limit-badge ok';
+    } else if(total <= 10){
+      badge.textContent = `${total} erro${total !== 1 ? 's' : ''}`;
+      badge.className = 'rate-limit-badge warn';
+    } else {
+      badge.textContent = `${total} ERROS!`;
+      badge.className = 'rate-limit-badge';
+      // Mostrar alerta quando passar de 10
+      if(total > 10){
+        const rateAlert = document.getElementById('rate-alert');
+        document.getElementById('rate-alert-msg').textContent = 
+          `⚠️ ALERTA: Você atingiu ${total} bloqueios por rate limit! A Meta API está limitando suas requisições.`;
+        rateAlert.classList.add('show');
+      }
+    }
+    
+    // Atualizar tabela
+    if(!history || history.length === 0){
+      tbody.innerHTML = '<tr><td colspan="3" class="rate-limit-empty">Nenhum erro de rate limit registrado</td></tr>';
+      return;
+    }
+    
+    tbody.innerHTML = history.map(h => `
+      <tr>
+        <td class="rate-limit-time">${h.timestamp}</td>
+        <td>${h.status_code}</td>
+        <td class="rate-limit-msg">${h.message}</td>
+      </tr>
+    `).join('');
+  }
+
+  async function loadPage(page){
+    const btn = document.getElementById('btn-atualizar');
+    btn.disabled = true;
+    document.getElementById('error-bar').classList.remove('show');
+
+    const start = document.getElementById('startDate').value;
+    const end = document.getElementById('endDate').value;
+    const tmpl = document.getElementById('templateFilter').value;
+
+    document.getElementById('tbody').innerHTML =
+      '<tr><td colspan="8"><div class="state-box"><div class="spinner"></div>Buscando dados...</div></td></tr>';
+    document.getElementById('pagination').innerHTML = '';
+
+    try {
+      const params = new URLSearchParams({startDate:start, endDate:end, page});
+      if(tmpl) params.append('template', tmpl);
+      const res = await fetch('/api/data?' + params);
+      const data = await res.json();
+
+      // Rate limit
+      if(data.rate_limit_hits !== undefined) checkAlert(data.rate_limit_hits);
+      if(data.requests_last_minute !== undefined) updateRateMeter(data.requests_last_minute, 10);
+
+      if(res.status === 429 || data.rate_limit_hit){
+        showError(data.error || 'Rate limit atingido.');
+        checkRateLimit(10, 10);
+        document.getElementById('tbody').innerHTML =
+          '<tr><td colspan="8"><div class="state-box"><div class="state-icon">⏱</div>' + (data.error||'Rate limit') + '</div></td></tr>';
+        btn.disabled = false;
+        return;
+      }
+
+      if(data.error){
+        showError(data.error);
+        document.getElementById('tbody').innerHTML =
+          `<tr><td colspan="8"><div class="state-box"><div class="state-icon">✕</div>${data.error}</div></td></tr>`;
+        btn.disabled = false;
+        return;
+      }
+
+      // Atualizar list de templates para a busca
+      allTemplates = data.templates || [];
+
+      // Stats
+      const s = data.stats||{};
+      document.getElementById('stat-total').textContent    = fmt(s.total);
+      document.getElementById('stat-erros').textContent    = fmt(s.erros);
+      document.getElementById('stat-entregues').textContent= fmt(s.entregues);
+      document.getElementById('stat-enviados').textContent = fmt(s.enviados);
+      document.getElementById('stat-lidos').textContent    = fmt(s.lidos);
+      document.getElementById('stat-pendentes').textContent = fmt(s.pendentes||0);
+
+      // Calcular sucesso
+      const sucesso = (s.total || 0) - (s.erros || 0);
+      document.getElementById('stat-sucesso').textContent = fmt(sucesso);
+
+      // Percentuais e barras
+      if(s.total > 0){
+        document.getElementById('stat-pct-sucesso').textContent = `${s.pct_sucesso||0}%`;
+        document.getElementById('stat-bar-sucesso').style.width = `${s.pct_sucesso||0}%`;
+
+        document.getElementById('stat-pct-erros').textContent = `${s.pct_erros||0}%`;
+        document.getElementById('stat-bar-erros').style.width = `${s.pct_erros||0}%`;
+
+        document.getElementById('stat-pct-entregues').textContent = `${s.pct_entregues||0}%`;
+        document.getElementById('stat-bar-entregues').style.width = `${s.pct_entregues||0}%`;
+
+        document.getElementById('stat-pct-enviados').textContent = `${s.pct_enviados||0}%`;
+        document.getElementById('stat-bar-enviados').style.width = `${s.pct_enviados||0}%`;
+
+        document.getElementById('stat-pct-lidos').textContent = `${s.pct_lidos||0}%`;
+        document.getElementById('stat-bar-lidos').style.width = `${s.pct_lidos||0}%`;
+      } else {
+        document.getElementById('stat-pct-sucesso').textContent = '—';
+        document.getElementById('stat-pct-erros').textContent = '—';
+        document.getElementById('stat-pct-entregues').textContent = '—';
+        document.getElementById('stat-pct-enviados').textContent = '—';
+        document.getElementById('stat-pct-lidos').textContent = '—';
+      }
+
+      // Info de registros
+      const pg = data.pagination||{};
+      currentPage = pg.page||1;
+      totalPages  = pg.total_pages||1;
+      const from = ((currentPage-1)*50)+1;
+      const to   = Math.min(currentPage*50, pg.total||0);
+      document.getElementById('record-info').textContent =
+        `${fmt(from)}–${fmt(to)} de ${fmt(pg.total)} registros`;
+
+      // Tabela
+      const records = data.records||[];
+      if(!records.length){
+        document.getElementById('tbody').innerHTML =
+          '<tr><td colspan="8"><div class="state-box"><div class="state-icon">○</div>Nenhum registro encontrado.</div></td></tr>';
+      } else {
+        document.getElementById('tbody').innerHTML = records.map(r=>`
+          <tr>
+            <td class="td-timestamp">${r.timestamp}</td>
+            <td class="td-key">${fmtPhone(r.key)}</td>
+            <td class="td-template">${r.template_name}</td>
+            <td><span class="badge ${r.status_class}"><span class="badge-dot"></span>${r.status}</span></td>
+            <td class="td-reason">${r.reason}</td>
+            <td class="td-id" title="${r.flow_id}">${r.flow_id}</td>
+            <td class="td-id" title="${r.agent_id}">${r.agent_id}</td>
+            <td class="td-id" title="${r.conversation_id}">${r.conversation_id}</td>
+          </tr>`).join('');
+      }
+
+      // Paginação
+      renderPagination(currentPage, totalPages);
+
+      const now = new Date().toLocaleTimeString('pt-BR');
+      document.getElementById('last-update').textContent = 'Atualizado ' + now;
+      showToast('Dados atualizados');
+      countdown = 5 * 60;
+
+      // Armazenar dados para renderização temporal
+      lastLoadedData = data;
+
+      // Renderizar análise temporal com granularidade selecionada
+      renderTemporalAnalysis(data.stats || {}, currentGranularity);
+
+      // Renderizar análise de erros
+      renderErrorAnalysis(data.stats?.error_analysis || []);
+
+      // Atualizar badge de rate limit (erro 130429)
+      const rateLimitCount = data.stats?.rate_limit_analysis?.total_130429 || 0;
+      updateRateLimitBadge(rateLimitCount);
+
+      // Atualizar histórico de rate limit
+      if(data.api_rate_limit_count !== undefined){
+        updateRateLimitHistory(data.api_rate_limit_count, data.api_rate_limit_history || []);
+      }
+
+      // Resetar countdown com o intervalo atual
+      countdown = updateIntervalSeconds;
+
+    } catch(e){
+      showError('Erro de conexão: ' + e.message);
+      document.getElementById('tbody').innerHTML =
+        `<tr><td colspan="8"><div class="state-box"><div class="state-icon">✕</div>${e.message}</div></td></tr>`;
+    }
+
+    btn.disabled = false;
+  }
+
+  function renderPagination(page, total){
+    const wrap = document.getElementById('pagination');
+    if(total <= 1){ wrap.innerHTML=''; return; }
+
+    let html = '';
+    html += `<button class="page-btn" onclick="loadPage(${page-1})" ${page<=1?'disabled':''}>‹</button>`;
+
+    // Janela de páginas
+    let start = Math.max(1, page-2);
+    let end   = Math.min(total, page+2);
+    if(start>1){ html+=`<button class="page-btn" onclick="loadPage(1)">1</button>`; if(start>2) html+=`<span class="page-info">…</span>`; }
+    for(let i=start;i<=end;i++){
+      html+=`<button class="page-btn${i===page?' active':''}" onclick="loadPage(${i})">${i}</button>`;
+    }
+    if(end<total){ if(end<total-1) html+=`<span class="page-info">…</span>`; html+=`<button class="page-btn" onclick="loadPage(${total})">${total}</button>`; }
+
+    html += `<button class="page-btn" onclick="loadPage(${page+1})" ${page>=total?'disabled':''}>›</button>`;
+    html += `<span class="page-info">Pág. ${page} de ${total}</span>`;
+    wrap.innerHTML = html;
+  }
+
+  let currentErrorAnalysisData = [];
+
+  function renderErrorAnalysis(errorData){
+    currentErrorAnalysisData = errorData;
+    const tbody = document.getElementById('error-tbody');
+
+    if(!errorData || errorData.length === 0){
+      tbody.innerHTML = '<tr><td colspan="4" class="error-empty">Nenhum erro registrado neste período</td></tr>';
+      return;
+    }
+
+    let html = '';
+    errorData.forEach(template => {
+      const rowspan = template.reasons.length;
+      
+      template.reasons.forEach((reason, idx) => {
+        html += '<tr>';
+        if(idx === 0){
+          html += `<td rowspan="${rowspan}" class="error-template">${template.template}</td>`;
+          html += `<td rowspan="${rowspan}" class="error-count">${template.total_errors}</td>`;
+        }
+        html += `<td class="error-reason">${reason.reason || '(Sem motivo)'}</td>`;
+        html += `<td class="error-reason-count">${reason.count}</td>`;
+        html += '</tr>';
+      });
+    });
+
+    tbody.innerHTML = html;
+  }
+
+  function filterErrorAnalysis(){
+    const filter = document.getElementById('error-filter-select').value;
+    if(filter === ''){
+      renderErrorAnalysis(currentErrorAnalysisData);
+    } else if(filter === 'by-reason'){
+      // Agrupar por motivo
+      const byReason = {};
+      currentErrorAnalysisData.forEach(template => {
+        template.reasons.forEach(reason => {
+          const key = reason.reason || '(Sem motivo)';
+          if(!byReason[key]){
+            byReason[key] = {templates: [], count: 0};
+          }
+          byReason[key].templates.push(template.template);
+          byReason[key].count += reason.count;
+        });
+      });
+
+      const tbody = document.getElementById('error-tbody');
+      let html = '';
+      Object.entries(byReason)
+        .sort((a,b) => b[1].count - a[1].count)
+        .forEach(([reason, data]) => {
+          html += '<tr>';
+          html += `<td class="error-reason">${reason}</td>`;
+          html += `<td class="error-count">${data.count}</td>`;
+          html += `<td class="error-template">${data.templates.join(', ')}</td>`;
+          html += '<td>—</td>';
+          html += '</tr>';
+        });
+
+      tbody.innerHTML = html;
+    }
+  }
+
+  function renderMinuteAnalysis(minuteData){
+    // Função mantida para compatibilidade, mas não é mais usada
+    // Use renderTemporalAnalysis ao invés
+    return;
+  }
+
+  // Countdown
+  setInterval(()=>{
+    countdown--;
+    if(countdown<=0){ countdown=updateIntervalSeconds; loadPage(currentPage); }
+    document.getElementById('countdown').textContent = pad(Math.floor(countdown/60))+':'+pad(countdown%60);
+  }, 1000);
+
+  // Listener para mudança de intervalo de atualização
+  document.getElementById('updateInterval').addEventListener('change', (e)=>{
+    updateIntervalSeconds = parseInt(e.target.value);
+    countdown = updateIntervalSeconds;
+    showToast(`Intervalo de atualização: ${e.target.options[e.target.selectedIndex].text}`);
+  });
+
+  // Polling do rate meter (a cada 5s)
+  setInterval(async()=>{
+    try {
+      const r = await fetch('/api/rate-status');
+      const d = await r.json();
+      updateRateMeter(d.requests_last_minute, d.limit);
+      checkAlert(d.rate_limit_hits);
+      
+      // Atualizar histórico de rate limit
+      if(d.api_rate_limit_count !== undefined){
+        updateRateLimitHistory(d.api_rate_limit_count, d.api_rate_limit_history || []);
+      }
+      
+      // Atualizar timestamp do último status verificado
+      const now = new Date().toLocaleTimeString('pt-BR');
+      document.getElementById('last-update').textContent = 'Atualizado ' + now;
+    } catch{}
+  }, 5000);
+
+  // NOVA FUNCIONALIDADE: Gerenciar filtro de templates com busca
+  let allTemplates = [];
+  let currentGranularity = 'day'; // Granularidade padrão
+  const templateInput = document.getElementById('templateFilter');
+  const templateSuggestions = document.getElementById('templateSuggestions');
+
+  function renderTemplateSuggestions(query = '') {
+    const filtered = query.length === 0 
+      ? allTemplates 
+      : allTemplates.filter(t => t.toLowerCase().includes(query.toLowerCase()));
+    
+    let html = '<div class="template-suggestion-item template-all-option" onclick="selectTemplate(\'\')"><strong>✓ Todos os templates</strong></div>';
+    
+    if (filtered.length === 0 && query.length > 0) {
+      html += '<div class="template-suggestion-item" style="color: var(--muted);">Nenhum template encontrado</div>';
+    } else {
+      html += filtered.map(t => 
+        `<div class="template-suggestion-item" onclick="selectTemplate('${t.replace(/'/g, "\\'")}')">${t}</div>`
+      ).join('');
+    }
+    
+    templateSuggestions.innerHTML = html;
+    templateSuggestions.classList.add('active');
+  }
+
+  // Mostrar todos os templates ao focar
+  templateInput.addEventListener('focus', () => {
+    if (allTemplates.length > 0) {
+      renderTemplateSuggestions('');
+    }
+  });
+
+  // Filtrar templates conforme digita
+  templateInput.addEventListener('input', (e) => {
+    const query = e.target.value;
+    if (allTemplates.length > 0) {
+      renderTemplateSuggestions(query);
+    }
+  });
+
+  // Fechar sugestões ao clicar fora
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.template-search-wrapper')) {
+      templateSuggestions.classList.remove('active');
+    }
+  });
+
+  function selectTemplate(template) {
+    if (template === '') {
+      templateInput.value = '';
+      templateInput.placeholder = '📋 Todos os templates';
+    } else {
+      templateInput.value = template;
+      templateInput.placeholder = `🔍 ${template}`;
+    }
+    templateSuggestions.classList.remove('active');
+  }
+
+  function changeGranularity(granularity) {
+    currentGranularity = granularity;
+    
+    // Atualizar botões ativos
+    document.querySelectorAll('.granularity-btn').forEach(btn => {
+      btn.classList.remove('active');
+    });
+    document.querySelector(`[data-granularity="${granularity}"]`).classList.add('active');
+    
+    // Renderizar análise com nova granularidade se dados já existem
+    if (lastLoadedData) {
+      renderTemporalAnalysis(lastLoadedData.stats || {}, currentGranularity);
+    }
+  }
+
+  let lastLoadedData = null;
+
+  function renderTemporalAnalysis(stats, granularity) {
+    const ctx = document.getElementById('minute-chart-canvas');
+    if (!ctx) return;
+
+    let data = [];
+    let title = '';
+    let xAxisLabel = '';
+    let icon = '';
+
+    if (granularity === 'day' && stats.daily_data) {
+      data = stats.daily_data;
+      title = 'Análise Temporal por Dia';
+      xAxisLabel = 'Dia';
+      icon = '📅';
+    } else if (granularity === 'hour' && stats.hourly_data) {
+      data = stats.hourly_data;
+      title = 'Análise Temporal por Hora';
+      xAxisLabel = 'Hora';
+      icon = '⏰';
+    } else if (granularity === 'minute' && stats.minute_data) {
+      data = stats.minute_data;
+      title = 'Análise Temporal por Minuto';
+      xAxisLabel = 'Minuto';
+      icon = '⏱';
+    } else {
+      if (minuteChart) minuteChart.destroy();
+      ctx.style.display = 'none';
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      if (minuteChart) minuteChart.destroy();
+      ctx.style.display = 'none';
+      return;
+    }
+
+    ctx.style.display = 'block';
+
+    // Preparar rótulos baseado na granularidade
+    let labels = [];
+    if (granularity === 'day') {
+      labels = data.map(d => d.timestamp.slice(5, 10)).reverse();
+    } else if (granularity === 'hour') {
+      labels = data.map(d => d.timestamp.slice(11, 16)).reverse();
+    } else {
+      labels = data.map(d => d.timestamp.slice(11, 16)).reverse();
+    }
+
+    const enviados = data.map(d => d.enviados || 0).reverse();
+    const entregues = data.map(d => d.entregues || 0).reverse();
+    const lidos = data.map(d => d.lidos || 0).reverse();
+    const erros = data.map(d => d.erros || 0).reverse();
+
+    if (minuteChart) minuteChart.destroy();
+
+    minuteChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'Enviados',
+            data: enviados,
+            borderColor: '#4f8ef7',
+            backgroundColor: 'rgba(79, 142, 247, 0.1)',
+            borderWidth: 3,
+            tension: 0.3,
+            fill: false,
+            pointBackgroundColor: '#4f8ef7',
+            pointBorderColor: '#0d0f14',
+            pointBorderWidth: 3,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+          },
+          {
+            label: 'Entregues',
+            data: entregues,
+            borderColor: '#10b981',
+            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+            borderWidth: 3,
+            tension: 0.3,
+            fill: false,
+            pointBackgroundColor: '#10b981',
+            pointBorderColor: '#0d0f14',
+            pointBorderWidth: 3,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+          },
+          {
+            label: 'Lidos',
+            data: lidos,
+            borderColor: '#a78bfa',
+            backgroundColor: 'rgba(167, 139, 250, 0.1)',
+            borderWidth: 3,
+            tension: 0.3,
+            fill: false,
+            pointBackgroundColor: '#a78bfa',
+            pointBorderColor: '#0d0f14',
+            pointBorderWidth: 3,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+          },
+          {
+            label: 'Erros',
+            data: erros,
+            borderColor: '#f05252',
+            backgroundColor: 'rgba(240, 82, 82, 0.1)',
+            borderWidth: 3.5,
+            tension: 0.3,
+            fill: false,
+            pointBackgroundColor: '#f05252',
+            pointBorderColor: '#0d0f14',
+            pointBorderWidth: 3,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            borderDash: [5, 5],
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false,
+        },
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top',
+            labels: {
+              color: '#e8eaf0',
+              font: { family: 'var(--mono)', size: 12, weight: 600 },
+              padding: 15,
+              usePointStyle: true,
+              pointStyle: 'circle',
+            },
+          },
+          tooltip: {
+            backgroundColor: 'rgba(13, 15, 20, 0.9)',
+            borderColor: '#242836',
+            borderWidth: 1,
+            titleColor: '#e8eaf0',
+            bodyColor: '#6b7280',
+            padding: 10,
+            displayColors: true,
+            callbacks: {
+              title: (ctx) => `${xAxisLabel}: ${ctx[0].label}`,
+            },
+          },
+        },
+        scales: {
+          y: {
+            ticks: {
+              color: '#6b7280',
+              font: { family: 'var(--mono)', size: 11 },
+            },
+            grid: {
+              color: '#242836',
+              drawBorder: false,
+            },
+            beginAtZero: true,
+          },
+          x: {
+            ticks: {
+              color: '#6b7280',
+              font: { family: 'var(--mono)', size: 11 },
+            },
+            grid: {
+              display: false,
+              drawBorder: false,
+            },
+          },
+        },
+      },
+    });
+
+    // Atualizar título da análise com ícone
+    document.querySelector('.minute-header > div:first-child').textContent = `${icon} ${title}`;
+  }
+
+  // Mostrar usuário logado no header
+  function showUserMenu() {
+    const userName = document.getElementById('userName');
+    const userEmail = document.getElementById('userEmail');
+    const userAvatar = document.getElementById('userAvatar');
+    const userMenu = document.getElementById('userMenu');
+    
+    // Verificar se há dados do usuário na página (passados pelo backend)
+    if (typeof window.userData !== 'undefined' && window.userData) {
+      const name = window.userData.name || 'Usuário';
+      const email = window.userData.email || '';
+      
+      userName.textContent = name;
+      userEmail.textContent = email;
+      userAvatar.textContent = name.charAt(0).toUpperCase();
+      userMenu.style.display = 'flex';
+    }
+  }
+
+  // Mostrar menu do usuário ao carregar
+  showUserMenu();
+
+  loadPage(1);
+</script>
+</body>
+</html>
