@@ -35,12 +35,14 @@ STATUS_MAP = {
     "ERROR": "Erro", "SENT": "Enviado", "DELIVERED": "Entregue",
     "READ": "Lido", "FAILED": "Falhou", "PENDING": "Pendente",
     "QUEUED": "Na fila", "ACCEPTED": "Aceito", "UNDELIVERED": "Não entregue",
+    "ANSWERED": "Respondido",
 }
 
 STATUS_COLOR = {
     "ERROR": "error", "FAILED": "error", "UNDELIVERED": "error",
     "SENT": "sent", "DELIVERED": "delivered", "READ": "read",
     "PENDING": "pending", "QUEUED": "pending", "ACCEPTED": "sent",
+    "ANSWERED": "answered",
 }
 
 def translate_status(status):
@@ -84,7 +86,7 @@ def index():
     user = session.get('user', {})
     return render_template("index.html", today=today, user=user)
 
-@app.route("/api/data")
+@app.route("/api/hsm/data")
 def fetch_data():
     global rate_limit_hits
     start = request.args.get("startDate", datetime.now().strftime("%Y-%m-%d"))
@@ -104,7 +106,12 @@ def fetch_data():
 
     try:
         url = f"{API_BASE}?origin={ORIGIN}&startDate={start}&endDate={end}"
+        print(f"DEBUG: Fazendo requisição para: {url}")  # Debug
         resp = requests.get(url, headers=HEADERS, timeout=240)
+        print(f"DEBUG: Status code: {resp.status_code}")  # Debug
+        print(f"DEBUG: Content type: {resp.headers.get('content-type')}")  # Debug
+        if resp.status_code != 200:
+            print(f"DEBUG: Response text: {resp.text[:500]}")  # Debug
 
         if resp.status_code == 401:
             return jsonify({"error": "Não autorizado (401): token inválido ou expirado.", "records": [], "templates": [], "pagination": {}, "stats": {}}), 200
@@ -171,6 +178,9 @@ def fetch_data():
         "pendentes": sum(1 for p in processed if p["status_class"] == "pending"),
     }
     
+    # Calcular respondidos
+    stats["respondidos"] = sum(1 for p in processed if p["status_class"] == "answered")
+    
     # Calcular percentuais
     total = stats["total"]
     if total > 0:
@@ -179,8 +189,9 @@ def fetch_data():
         stats["pct_enviados"] = round((stats["enviados"] / total) * 100, 1)
         stats["pct_lidos"] = round((stats["lidos"] / total) * 100, 1)
         stats["pct_sucesso"] = round(((total - stats["erros"]) / total) * 100, 1)
+        stats["pct_respondidos"] = round((stats["respondidos"] / total) * 100, 1)
     else:
-        stats["pct_erros"] = stats["pct_entregues"] = stats["pct_enviados"] = stats["pct_lidos"] = stats["pct_sucesso"] = 0
+        stats["pct_erros"] = stats["pct_entregues"] = stats["pct_enviados"] = stats["pct_lidos"] = stats["pct_sucesso"] = stats["pct_respondidos"] = 0
     
     # Distribuição por minuto (útil para análise de picos)
     minute_data = {}
@@ -190,7 +201,7 @@ def fetch_data():
             if ts_str and ts_str != "—":
                 minute_key = ts_str[:16]  # YYYY-MM-DD HH:MM
                 if minute_key not in minute_data:
-                    minute_data[minute_key] = {"total": 0, "erros": 0, "enviados": 0, "entregues": 0, "lidos": 0}
+                    minute_data[minute_key] = {"total": 0, "erros": 0, "enviados": 0, "entregues": 0, "lidos": 0, "respondidos": 0}
                 minute_data[minute_key]["total"] += 1
                 if p["status_class"] == "error":
                     minute_data[minute_key]["erros"] += 1
@@ -200,6 +211,8 @@ def fetch_data():
                     minute_data[minute_key]["entregues"] += 1
                 elif p["status_class"] == "read":
                     minute_data[minute_key]["lidos"] += 1
+                if p["status_class"] == "answered":
+                    minute_data[minute_key]["respondidos"] += 1
         except:
             pass
     
@@ -214,7 +227,7 @@ def fetch_data():
             if ts_str and ts_str != "—":
                 hour_key = ts_str[:13]  # YYYY-MM-DD HH
                 if hour_key not in hourly_data:
-                    hourly_data[hour_key] = {"total": 0, "erros": 0, "enviados": 0, "entregues": 0, "lidos": 0}
+                    hourly_data[hour_key] = {"total": 0, "erros": 0, "enviados": 0, "entregues": 0, "lidos": 0, "respondidos": 0}
                 hourly_data[hour_key]["total"] += 1
                 if p["status_class"] == "error":
                     hourly_data[hour_key]["erros"] += 1
@@ -224,6 +237,8 @@ def fetch_data():
                     hourly_data[hour_key]["entregues"] += 1
                 elif p["status_class"] == "read":
                     hourly_data[hour_key]["lidos"] += 1
+                if p["status_class"] == "answered":
+                    hourly_data[hour_key]["respondidos"] += 1
         except:
             pass
     
@@ -238,7 +253,7 @@ def fetch_data():
             if ts_str and ts_str != "—":
                 day_key = ts_str[:10]  # YYYY-MM-DD
                 if day_key not in daily_data:
-                    daily_data[day_key] = {"total": 0, "erros": 0, "enviados": 0, "entregues": 0, "lidos": 0}
+                    daily_data[day_key] = {"total": 0, "erros": 0, "enviados": 0, "entregues": 0, "lidos": 0, "respondidos": 0}
                 daily_data[day_key]["total"] += 1
                 if p["status_class"] == "error":
                     daily_data[day_key]["erros"] += 1
@@ -248,6 +263,8 @@ def fetch_data():
                     daily_data[day_key]["entregues"] += 1
                 elif p["status_class"] == "read":
                     daily_data[day_key]["lidos"] += 1
+                if p["status_class"] == "answered":
+                    daily_data[day_key]["respondidos"] += 1
         except:
             pass
     
@@ -315,7 +332,7 @@ def fetch_data():
         "alert": api_rate_limit_count > 10,
     })
 
-@app.route("/api/rate-status")
+@app.route("/api/hsm/rate-status")
 def rate_status():
     now = time.time()
     while request_times and request_times[0] < now - 60:
@@ -327,6 +344,85 @@ def rate_status():
         "api_rate_limit_count": api_rate_limit_count,
         "api_rate_limit_history": list(api_rate_limit_history),
     })
+
+@app.route("/api/hsm/export")
+def export_csv():
+    global rate_limit_hits
+    start = request.args.get("startDate", datetime.now().strftime("%Y-%m-%d"))
+    end = request.args.get("endDate", datetime.now().strftime("%Y-%m-%d"))
+    template_filter = request.args.get("template", "")
+
+    allowed, hits, req_count = check_rate_limit()
+    if not allowed:
+        return "Rate limit atingido. Aguarde.", 429
+
+    try:
+        url = f"{API_BASE}?origin={ORIGIN}&startDate={start}&endDate={end}"
+        resp = requests.get(url, headers=HEADERS, timeout=240)
+
+        if resp.status_code == 401:
+            return "Não autorizado: token inválido.", 401
+        if resp.status_code == 403:
+            return "Acesso negado.", 403
+        if resp.status_code == 404:
+            return "Não encontrado.", 404
+        if resp.status_code == 429:
+            global api_rate_limit_count
+            api_rate_limit_count += 1
+            api_rate_limit_history.append({
+                "timestamp": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+                "status_code": 429,
+                "message": "Meta API Error: 130429 - (#130429) Rate limit hit"
+            })
+            return "Rate limit da API externa atingido.", 429
+        if resp.status_code >= 500:
+            return f"Erro no servidor da API ({resp.status_code}).", 500
+
+        resp.raise_for_status()
+        raw = resp.json()
+
+    except requests.exceptions.Timeout:
+        return "Tempo limite: API não respondeu.", 408
+    except requests.exceptions.ConnectionError:
+        return "Falha de conexão.", 503
+    except Exception as e:
+        return f"Erro: {str(e)}", 500
+
+    all_records = raw if isinstance(raw, list) else raw.get("data", raw.get("records", [raw] if isinstance(raw, dict) else []))
+    templates = sorted(set(r.get("template.name", "") for r in all_records if r.get("template.name")))
+
+    if template_filter:
+        all_records = [r for r in all_records if r.get("template.name") == template_filter]
+
+    processed = []
+    for r in all_records:
+        st = r.get("status", "")
+        processed.append({
+            "timestamp": format_datetime(r.get("timestamp")),
+            "key": r.get("key", "—"),
+            "template_name": r.get("template.name", "—"),
+            "status": translate_status(st),
+            "status_class": status_class(st),
+            "reason": r.get("reason", "—") or "—",
+            "flow_id": r.get("parameters.flowId", "—") or "—",
+            "agent_id": r.get("parameters.agentId", "—") or "—",
+            "answer": r.get("parameters.answer", "—") or "—",
+            "conversation_id": r.get("parameters.conversationId", "—") or "—",
+        })
+
+    # Gerar CSV
+    import csv
+    from io import StringIO
+    si = StringIO()
+    writer = csv.writer(si)
+    writer.writerow(["Data/Hora", "Número", "Template", "Status", "Motivo", "ID Fluxo", "ID Agente", "ID Conversa"])
+    for r in processed:
+        writer.writerow([r["timestamp"], r["key"], r["template_name"], r["status"], r["reason"], r["flow_id"], r["agent_id"], r["conversation_id"]])
+    output = si.getvalue()
+    si.close()
+
+    from flask import Response
+    return Response(output, mimetype="text/csv", headers={"Content-Disposition": "attachment; filename=relatorio_hsm.csv"})
 
 @app.route("/api/rate-limit-history")
 def rate_limit_history():
