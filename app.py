@@ -17,6 +17,8 @@ app.secret_key = os.getenv("SECRET_KEY", "dev-key-change-in-production")
 API_BASE = os.getenv("API_BASE", "")
 ORIGIN = os.getenv("ORIGIN", "")
 API_TOKEN = os.getenv("API_TOKEN", "")
+LOGIN_USER = os.getenv("LOGIN_USER", "")
+LOGIN_PASSWORD = os.getenv("LOGIN_PASSWORD", "")
 
 HEADERS = {"Authorization": API_TOKEN}
 
@@ -80,7 +82,33 @@ def check_rate_limit():
     request_times.append(now)
     return True, rate_limit_hits, count + 1
 
+def login_required(f):
+    def wrapper(*args, **kwargs):
+        if 'user' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    wrapper.__name__ = f.__name__
+    return wrapper
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        username = request.form.get("username")
+        password = request.form.get("password")
+        if username == LOGIN_USER and password == LOGIN_PASSWORD:
+            session['user'] = {'username': username}
+            return redirect(url_for('index'))
+        else:
+            return render_template("login.html", error="Acesso negado. Verifique usuário e senha.")
+    return render_template("login.html")
+
+@app.route("/logout")
+def logout():
+    session.pop('user', None)
+    return redirect(url_for('login'))
+
 @app.route("/")
+@login_required
 def index():
     today = datetime.now().strftime("%Y-%m-%d")
     user = session.get('user', {})
